@@ -1,0 +1,55 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== 1. Installing Homebrew if missing ==="
+if ! command -v brew &> /dev/null; then
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+# Ensure Homebrew environment is active
+eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)"
+
+echo "=== 2. Installing Chezmoi & Dev Tools via Homebrew ==="
+BREW_FORMULAS=(chezmoi git zsh vim neovim python3 go nvm)
+for formula in "${BREW_FORMULAS[@]}"; do
+    brew list "$formula" &>/dev/null || brew install "$formula"
+done
+
+echo "=== 3. Installing GUI Applications (Casks) ==="
+BREW_CASKS=(
+    adobe-creative-cloud
+    darktable
+    obsidian
+    insta360-studio
+    kdenlive
+    synology-drive
+    magnet
+    brave-browser
+)
+
+for cask in "${BREW_CASKS[@]}"; do
+    brew list --cask "$cask" &>/dev/null || brew install --cask "$cask"
+done
+
+echo "Note: Adobe Lightroom and Photoshop can be installed via the Creative Cloud desktop app."
+
+echo "=== 4. Configuring NVM, Node LTS & Corepack ==="
+mkdir -p "$HOME/.nvm"
+export NVM_DIR="$HOME/.nvm"
+
+if [ -s "/opt/homebrew/opt/nvm/nvm.sh" ]; then
+    \. "/opt/homebrew/opt/nvm/nvm.sh"
+elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+    \. "$HOME/.nvm/nvm.sh"
+fi
+
+if command -v nvm &>/dev/null; then
+    nvm install --lts || true
+    nvm use --lts || true
+    corepack enable || true
+fi
+
+echo "=== macOS setup complete! ==="
+{{ end -}}

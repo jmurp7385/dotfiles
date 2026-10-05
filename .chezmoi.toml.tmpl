@@ -1,0 +1,7 @@
+[data]
+    osid = {{ .chezmoi.os | quote }}
+    {{ if eq .chezmoi.os "linux" }}
+    distro = {{ .chezmoi.osRelease.id | quote }}
+    {{ else }}
+    distro = ""
+    {{ end }}
