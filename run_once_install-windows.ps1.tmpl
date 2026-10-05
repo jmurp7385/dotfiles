@@ -12,13 +12,19 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer
 # Enable Developer Mode (allows symlinks without admin privileges)
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1
 
-# --- Run Windows 11 Optimizer Script ---
-Write-Host "2 .Running Windows 11 Optimizer..." -ForegroundColor Yellow
+# --- Run Windows 11 Optimizer Script safely ---
+Write-Host "Running Windows 11 Optimizer..." -ForegroundColor Yellow
 $optScript = "$env:TEMP\Win11Opt.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Ublaze/Windows11-Optimizer/main/Windows11_Optimizer.ps1" -OutFile $optScript
-# Execute with desired default optimization flags non-interactively
-& $optScript -DisableTelemetry -DisableBingSearch -RemoveBloatware -OptimizePerformance
-Remove-Item -Path $optScript -Force -ErrorAction SilentlyContinue
+try {
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Ublaze/Windows11-Optimizer/main/Optimizer.ps1" -OutFile $optScript -ErrorAction Stop
+    if (Test-Path $optScript) {
+        # Executes script in a child bypass process to prevent halting the bootstrap
+        Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -File `"$optScript`"" -Verb RunAs -Wait
+        Remove-Item -Path $optScript -Force -ErrorAction SilentlyContinue
+    }
+} catch {
+    Write-Warning "Failed to download or execute Windows11-Optimizer script: $_"
+}
 
 Write-Host "--- 3. Enabling WSL2 (Windows Subsystem for Linux) ---" -ForegroundColor Cyan
 dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
