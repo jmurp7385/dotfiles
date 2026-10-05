@@ -12,11 +12,19 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer
 # Enable Developer Mode (allows symlinks without admin privileges)
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1
 
-Write-Host "--- 2. Enabling WSL2 (Windows Subsystem for Linux) ---" -ForegroundColor Cyan
+# --- Run Windows 11 Optimizer Script ---
+Write-Host "2 .Running Windows 11 Optimizer..." -ForegroundColor Yellow
+$optScript = "$env:TEMP\Win11Opt.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Ublaze/Windows11-Optimizer/main/Windows11_Optimizer.ps1" -OutFile $optScript
+# Execute with desired default optimization flags non-interactively
+& $optScript -DisableTelemetry -DisableBingSearch -RemoveBloatware -OptimizePerformance
+Remove-Item -Path $optScript -Force -ErrorAction SilentlyContinue
+
+Write-Host "--- 3. Enabling WSL2 (Windows Subsystem for Linux) ---" -ForegroundColor Cyan
 dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
 dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
 
-Write-Host "--- 3. Installing Core Apps via Winget ---" -ForegroundColor Cyan
+Write-Host "--- 4. Installing Core Apps via Winget ---" -ForegroundColor Cyan
 $packages = @(
     "Adobe.CreativeCloud",
     "AntibodySoftware.WizTree",
@@ -46,7 +54,7 @@ foreach ($pkg in $packages) {
     winget install --id $pkg --silent --accept-package-agreements --accept-source-agreements --exact --no-upgrade
 }
 
-Write-Host "--- 4. Refreshing Session Environment Path & NVM Variables ---" -ForegroundColor Cyan
+Write-Host "--- 5. Refreshing Session Environment Path & NVM Variables ---" -ForegroundColor Cyan
 # Fetch NVM Registry Variables created by winget
 $env:NVM_HOME = [System.Environment]::GetEnvironmentVariable("NVM_HOME", "Machine")
 $env:NVM_SYMLINK = [System.Environment]::GetEnvironmentVariable("NVM_SYMLINK", "Machine")
@@ -59,7 +67,7 @@ $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 $env:Path = [System.Environment]::ExpandEnvironmentVariables("$machinePath;$userPath;$env:NVM_HOME;$env:NVM_SYMLINK")
 
-Write-Host "--- 5. Configuring PowerShell Modules ---" -ForegroundColor Cyan
+Write-Host "--- 6. Configuring PowerShell Modules ---" -ForegroundColor Cyan
 if (-not (Get-Module -ListAvailable -Name posh-git)) {
     Install-Module -Name posh-git -Scope CurrentUser -Force -AllowClobber
 }
@@ -67,7 +75,7 @@ if (-not (Get-Module -ListAvailable -Name PSReadLine)) {
     Install-Module -Name PSReadLine -Scope CurrentUser -Force -AllowClobber
 }
 
-Write-Host "--- 6. Configuring Node LTS & Corepack ---" -ForegroundColor Cyan
+Write-Host "--- 7. Configuring Node LTS & Corepack ---" -ForegroundColor Cyan
 if (Get-Command nvm -ErrorAction SilentlyContinue) {
     Write-Host "Installing Node LTS via NVM..." -ForegroundColor Yellow
     nvm install lts
