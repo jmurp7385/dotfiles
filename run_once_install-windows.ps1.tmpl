@@ -52,7 +52,8 @@ $packages = @(
     "Synology.DriveClient",
     "Synology.Assistant",
     "VideoLAN.VLC",
-    "Vim.Vim"
+    "Vim.Vim",
+    "Starship.Starship"
 )
 
 foreach ($pkg in $packages) {
@@ -86,7 +87,7 @@ if (Get-Command nvm -ErrorAction SilentlyContinue) {
     Write-Host "Installing Node LTS via NVM..." -ForegroundColor Yellow
     nvm install lts
     nvm use lts
-    
+
     Write-Host "Enabling Corepack..." -ForegroundColor Yellow
     corepack enable
 } else {
