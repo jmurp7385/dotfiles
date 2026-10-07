@@ -1,0 +1,54 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+
+$desiredValue = "'Monaspace Krypton NF', 'FiraCode Nerd Font Mono', 'Fira Code', monospace"
+$settingsCandidates = @(
+    (Join-Path $env:APPDATA "Code\User\settings.json"),
+    (Join-Path $env:APPDATA "Code - Insiders\User\settings.json")
+)
+
+foreach ($settingsPath in $settingsCandidates) {
+    if (-not (Test-Path $settingsPath)) {
+        continue
+    }
+
+    $raw = Get-Content -Path $settingsPath -Raw
+    $pattern = '(?m)^(\s*)"terminal\.integrated\.fontFamily"\s*:\s*".*?"\s*,?\s*$'
+    $replacementLine = "`"terminal.integrated.fontFamily`": `"$desiredValue`","
+    $updated = $raw
+
+    if ([regex]::IsMatch($raw, $pattern)) {
+        $updated = [regex]::Replace(
+            $raw,
+            $pattern,
+            {
+                param($m)
+                return $m.Groups[1].Value + $replacementLine
+            },
+            1
+        )
+    } else {
+        $closingIndex = $raw.LastIndexOf('}')
+        if ($closingIndex -lt 0) {
+            Write-Warning "Skipping $settingsPath because no JSON object closing brace was found."
+            continue
+        }
+
+        $prefix = $raw.Substring(0, $closingIndex).TrimEnd()
+        if ($prefix.Length -eq 0) {
+            $updated = "{`r`n  $replacementLine`r`n}"
+        } else {
+            $lastChar = $prefix[$prefix.Length - 1]
+            $comma = if ($lastChar -eq '{' -or $lastChar -eq ',') { "" } else { "," }
+            $updated = "$prefix$comma`r`n  $replacementLine`r`n}"
+        }
+    }
+
+    if ($updated -ne $raw) {
+        Set-Content -Path $settingsPath -Value $updated -Encoding UTF8
+        Write-Host "Configured VS Code terminal font in $settingsPath" -ForegroundColor Green
+    } else {
+        Write-Host "VS Code terminal font already configured in $settingsPath"
+    }
+}
+{{ end -}}

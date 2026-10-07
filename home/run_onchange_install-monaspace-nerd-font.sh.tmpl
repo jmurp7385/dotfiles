@@ -1,0 +1,99 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "{{ .chezmoi.os }}" in
+  darwin)
+    FONT_DIR="$HOME/Library/Fonts"
+    ;;
+  linux)
+    FONT_DIR="$HOME/.local/share/fonts"
+    ;;
+  *)
+    echo "Skipping Monaspace Nerd Font install on unsupported OS: {{ .chezmoi.os }}"
+    exit 0
+    ;;
+esac
+
+mkdir -p "$FONT_DIR"
+
+font_installed() {
+  local pattern
+  for pattern in "$@"; do
+    if compgen -G "$FONT_DIR/$pattern" >/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_font_archive() {
+  local archive_name="$1"
+  local display_name="$2"
+  local tmp_dir zip_path extract_dir
+
+  tmp_dir="$(mktemp -d)"
+  zip_path="$tmp_dir/$archive_name"
+  extract_dir="$tmp_dir/extracted"
+  mkdir -p "$extract_dir"
+
+  if ! curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/$archive_name" -o "$zip_path"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if command -v unzip >/dev/null 2>&1; then
+    if ! unzip -q "$zip_path" -d "$extract_dir"; then
+      rm -rf "$tmp_dir"
+      return 1
+    fi
+  elif command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$zip_path" "$extract_dir"; then
+      rm -rf "$tmp_dir"
+      return 1
+    fi
+  else
+    echo "Cannot extract $zip_path: requires unzip or python3" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  while IFS= read -r -d '' font_file; do
+    install -m 0644 "$font_file" "$FONT_DIR/"
+  done < <(find "$extract_dir" -type f \( -name "*.ttf" -o -name "*.otf" \) -print0)
+
+  rm -rf "$tmp_dir"
+  echo "Installed $display_name to $FONT_DIR"
+  return 0
+}
+
+MONASPACE_PATTERNS=("Monaspace*NF*.ttf" "Monaspace*NerdFont*.ttf")
+FIRACODE_PATTERNS=("FiraCode*NF*.ttf" "FiraCode*NerdFont*.ttf")
+
+monaspace_ready=0
+if font_installed "${MONASPACE_PATTERNS[@]}"; then
+  monaspace_ready=1
+  echo "Monaspace Nerd Font already installed in $FONT_DIR"
+else
+  if install_font_archive "Monaspace.zip" "Monaspace Nerd Font" && font_installed "${MONASPACE_PATTERNS[@]}"; then
+    monaspace_ready=1
+  else
+    echo "Monaspace Nerd Font install failed; falling back to FiraCode Nerd Font." >&2
+  fi
+fi
+
+if [[ "$monaspace_ready" -ne 1 ]]; then
+  if font_installed "${FIRACODE_PATTERNS[@]}"; then
+    echo "FiraCode Nerd Font already installed in $FONT_DIR"
+  else
+    if ! install_font_archive "FiraCode.zip" "FiraCode Nerd Font (fallback)"; then
+      echo "Failed to install FiraCode Nerd Font fallback." >&2
+      exit 1
+    fi
+  fi
+fi
+
+if command -v fc-cache >/dev/null 2>&1; then
+  fc-cache -f "$FONT_DIR"
+fi
+{{ end -}}

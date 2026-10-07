@@ -1,0 +1,91 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+
+$fontDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
+$fontsRegPath = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts"
+
+function Test-FontInstalled {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Patterns
+    )
+
+    foreach ($pattern in $Patterns) {
+        if (Get-ChildItem -Path $fontDir -Filter $pattern -ErrorAction SilentlyContinue) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Install-FontArchive {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ArchiveName,
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName,
+        [Parameter(Mandatory = $true)]
+        [string[]]$MatchPatterns
+    )
+
+    if (Test-FontInstalled -Patterns $MatchPatterns) {
+        Write-Host "$DisplayName already installed in $fontDir"
+        return $true
+    }
+
+    $fontArchiveUrl = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/$ArchiveName"
+    $tempDir = Join-Path $env:TEMP ("nerd-font-" + [guid]::NewGuid().ToString("N"))
+    $zipPath = Join-Path $tempDir $ArchiveName
+    $extractDir = Join-Path $tempDir "extracted"
+
+    New-Item -ItemType Directory -Path $fontDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+    try {
+        Write-Host "Downloading $DisplayName..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri $fontArchiveUrl -OutFile $zipPath
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+        $fontFiles = Get-ChildItem -Path $extractDir -Recurse -Include *.ttf, *.otf -File
+        if (-not $fontFiles) {
+            throw "No font files found in archive $ArchiveName."
+        }
+
+        foreach ($fontFile in $fontFiles) {
+            $destination = Join-Path $fontDir $fontFile.Name
+            Copy-Item -Path $fontFile.FullName -Destination $destination -Force
+            New-ItemProperty -Path $fontsRegPath -Name ("{0} (TrueType)" -f $fontFile.BaseName) -Value $fontFile.Name -PropertyType String -Force | Out-Null
+        }
+    } finally {
+        if (Test-Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (-not (Test-FontInstalled -Patterns $MatchPatterns)) {
+        throw "Installation completed but $DisplayName was not detected in $fontDir."
+    }
+
+    Write-Host "Installed $DisplayName to $fontDir" -ForegroundColor Green
+    return $true
+}
+
+$monaspacePatterns = @("Monaspace*NF*.ttf", "Monaspace*NerdFont*.ttf")
+$firaCodePatterns = @("FiraCode*NF*.ttf", "FiraCode*NerdFont*.ttf")
+
+$monaspaceReady = $false
+try {
+    $monaspaceReady = Install-FontArchive -ArchiveName "Monaspace.zip" -DisplayName "Monaspace Nerd Font" -MatchPatterns $monaspacePatterns
+} catch {
+    Write-Warning "Monaspace Nerd Font install failed: $_"
+}
+
+if (-not $monaspaceReady) {
+    try {
+        Install-FontArchive -ArchiveName "FiraCode.zip" -DisplayName "FiraCode Nerd Font (fallback)" -MatchPatterns $firaCodePatterns | Out-Null
+    } catch {
+        throw "Both Monaspace and FiraCode Nerd Font installs failed. Last error: $_"
+    }
+}
+{{ end -}}

@@ -1,0 +1,76 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+FONT_FACE=""
+FONT_SIZE="12"
+
+case "{{ .chezmoi.os }}" in
+  darwin)
+    FONT_DIR="$HOME/Library/Fonts"
+    ;;
+  linux)
+    FONT_DIR="$HOME/.local/share/fonts"
+    ;;
+  *)
+    FONT_DIR=""
+    ;;
+esac
+
+font_installed() {
+  local pattern
+  for pattern in "$@"; do
+    if [[ -n "$FONT_DIR" ]] && compgen -G "$FONT_DIR/$pattern" >/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if font_installed "MonaspaceKrypton*NF*.ttf" "MonaspaceKrypton*NerdFont*.ttf"; then
+  FONT_FACE="Monaspace Krypton NF"
+elif font_installed "FiraCode*NF*.ttf" "FiraCode*NerdFont*.ttf"; then
+  FONT_FACE="FiraCode Nerd Font Mono"
+else
+  echo "Neither Monaspace nor FiraCode Nerd Font is installed in $FONT_DIR; skipping terminal font config." >&2
+  exit 0
+fi
+
+case "{{ .chezmoi.os }}" in
+  darwin)
+    if command -v osascript >/dev/null 2>&1; then
+      osascript \
+        -e 'tell application "Terminal"' \
+        -e 'if not (exists settings set "Basic") then error "Terminal settings set '\''Basic'\'' not found."' \
+        -e "set font name of settings set \"Basic\" to \"$FONT_FACE\"" \
+        -e "set font size of settings set \"Basic\" to $FONT_SIZE" \
+        -e 'set default settings to settings set "Basic"' \
+        -e 'set startup settings to settings set "Basic"' \
+        -e 'end tell'
+      echo "Configured Terminal.app default profile font to ${FONT_FACE} ${FONT_SIZE}"
+    else
+      echo "osascript not found; cannot configure Terminal.app font automatically." >&2
+      exit 1
+    fi
+    ;;
+  linux)
+    if command -v gsettings >/dev/null 2>&1; then
+      default_profile="$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d \')"
+      if [[ -z "$default_profile" ]]; then
+        echo "Could not determine GNOME Terminal default profile." >&2
+        exit 1
+      fi
+      profile_path="org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${default_profile}/"
+      gsettings set "$profile_path" use-system-font false
+      gsettings set "$profile_path" font "${FONT_FACE} ${FONT_SIZE}"
+      echo "Configured GNOME Terminal default profile font to ${FONT_FACE} ${FONT_SIZE}"
+    else
+      echo "gsettings not found; cannot configure GNOME Terminal font automatically." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Unsupported OS for terminal font configuration: {{ .chezmoi.os }}"
+    ;;
+esac
+{{ end -}}

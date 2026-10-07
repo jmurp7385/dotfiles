@@ -1,0 +1,182 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = "Stop"
+
+$fontDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
+$fontCandidates = @(
+    @{ Face = "Monaspace Krypton NF"; Patterns = @("MonaspaceKrypton*NF*.ttf", "MonaspaceKrypton*NerdFont*.ttf") },
+    @{ Face = "FiraCode Nerd Font Mono"; Patterns = @("FiraCode*NF*.ttf", "FiraCode*NerdFont*.ttf") }
+)
+
+function Test-FontInstalled {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Patterns
+    )
+    foreach ($pattern in $Patterns) {
+        if (Get-ChildItem -Path $fontDir -Filter $pattern -ErrorAction SilentlyContinue) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function ConvertFrom-JsonC {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content
+    )
+
+    $withoutComments = New-Object System.Text.StringBuilder
+    $inString = $false
+    $escapeNext = $false
+    $inLineComment = $false
+    $inBlockComment = $false
+
+    for ($i = 0; $i -lt $Content.Length; $i++) {
+        $ch = $Content[$i]
+        $next = if ($i + 1 -lt $Content.Length) { $Content[$i + 1] } else { [char]0 }
+
+        if ($inLineComment) {
+            if ($ch -eq "`n" -or $ch -eq "`r") {
+                $inLineComment = $false
+                [void]$withoutComments.Append($ch)
+            }
+            continue
+        }
+
+        if ($inBlockComment) {
+            if ($ch -eq '*' -and $next -eq '/') {
+                $inBlockComment = $false
+                $i++
+            }
+            continue
+        }
+
+        if ($inString) {
+            [void]$withoutComments.Append($ch)
+            if ($escapeNext) {
+                $escapeNext = $false
+            } elseif ($ch -eq '\') {
+                $escapeNext = $true
+            } elseif ($ch -eq '"') {
+                $inString = $false
+            }
+            continue
+        }
+
+        if ($ch -eq '"') {
+            $inString = $true
+            [void]$withoutComments.Append($ch)
+            continue
+        }
+
+        if ($ch -eq '/' -and $next -eq '/') {
+            $inLineComment = $true
+            $i++
+            continue
+        }
+
+        if ($ch -eq '/' -and $next -eq '*') {
+            $inBlockComment = $true
+            $i++
+            continue
+        }
+
+        [void]$withoutComments.Append($ch)
+    }
+
+    $withoutTrailingCommas = New-Object System.Text.StringBuilder
+    $stripped = $withoutComments.ToString()
+    $inString = $false
+    $escapeNext = $false
+
+    for ($i = 0; $i -lt $stripped.Length; $i++) {
+        $ch = $stripped[$i]
+
+        if ($inString) {
+            [void]$withoutTrailingCommas.Append($ch)
+            if ($escapeNext) {
+                $escapeNext = $false
+            } elseif ($ch -eq '\') {
+                $escapeNext = $true
+            } elseif ($ch -eq '"') {
+                $inString = $false
+            }
+            continue
+        }
+
+        if ($ch -eq '"') {
+            $inString = $true
+            [void]$withoutTrailingCommas.Append($ch)
+            continue
+        }
+
+        if ($ch -eq ',') {
+            $j = $i + 1
+            while ($j -lt $stripped.Length -and [char]::IsWhiteSpace($stripped[$j])) {
+                $j++
+            }
+
+            if ($j -lt $stripped.Length -and ($stripped[$j] -eq '}' -or $stripped[$j] -eq ']')) {
+                continue
+            }
+        }
+
+        [void]$withoutTrailingCommas.Append($ch)
+    }
+
+    return ($withoutTrailingCommas.ToString() | ConvertFrom-Json)
+}
+
+$fontFace = $null
+foreach ($candidate in $fontCandidates) {
+    if (Test-FontInstalled -Patterns $candidate.Patterns) {
+        $fontFace = $candidate.Face
+        break
+    }
+}
+
+if (-not $fontFace) {
+    Write-Warning "Neither Monaspace nor FiraCode Nerd Font was detected in $fontDir. Skipping terminal font update."
+    return
+}
+
+$terminalSettingsCandidates = @(
+    (Join-Path $env:LOCALAPPDATA "Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"),
+    (Join-Path $env:LOCALAPPDATA "Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json")
+)
+
+$updatedAny = $false
+foreach ($settingsPath in $terminalSettingsCandidates) {
+    if (-not (Test-Path $settingsPath)) {
+        continue
+    }
+
+    try {
+        $rawSettings = Get-Content -Path $settingsPath -Raw
+        $settings = ConvertFrom-JsonC -Content $rawSettings
+    } catch {
+        Write-Warning "Skipping $settingsPath because it could not be parsed as JSON/JSONC. Error: $($_.Exception.Message)"
+        continue
+    }
+
+    if (-not $settings.profiles) {
+        $settings | Add-Member -MemberType NoteProperty -Name profiles -Value ([pscustomobject]@{})
+    }
+    if (-not $settings.profiles.defaults) {
+        $settings.profiles | Add-Member -MemberType NoteProperty -Name defaults -Value ([pscustomobject]@{})
+    }
+    if (-not $settings.profiles.defaults.font) {
+        $settings.profiles.defaults | Add-Member -MemberType NoteProperty -Name font -Value ([pscustomobject]@{})
+    }
+
+    $settings.profiles.defaults.font.face = $fontFace
+    $settings | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
+    Write-Host "Configured Windows Terminal font to '$fontFace' in $settingsPath" -ForegroundColor Green
+    $updatedAny = $true
+}
+
+if (-not $updatedAny) {
+    Write-Warning "No editable Windows Terminal settings.json found. Open Windows Terminal once and rerun if needed."
+}
+{{ end -}}

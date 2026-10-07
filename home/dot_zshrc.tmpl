@@ -7,9 +7,25 @@ plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
+{{ if eq .chezmoi.os "windows" }}
+if [[ -d "/c/Apps/bin" ]]; then
+  export PATH="/c/Apps/bin:$PATH"
+fi
+{{ end }}
+
 # --- Initialize Starship Prompt ---
-if command -v starship &> /dev/null; then
-  eval "$(starship init zsh)"
+if command -v starship >/dev/null 2>&1; then
+  _starship_bin="$(command -v starship)"
+  {{ if eq .chezmoi.os "windows" }}
+  # Git Bash + Windows paths with spaces can break generated init script parsing.
+  # Only run starship init when the resolved binary path has no spaces.
+  if [[ "$_starship_bin" != *" "* ]]; then
+    eval "$("$_starship_bin" init zsh)"
+  fi
+  {{ else }}
+  eval "$("$_starship_bin" init zsh)"
+  {{ end }}
+  unset _starship_bin
 fi
 
 # --- OS Specific Environment Hooks ---
