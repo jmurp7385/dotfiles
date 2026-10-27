@@ -1,61 +1,43 @@
 export ZSH="$HOME/.oh-my-zsh"
 
-# Set theme to empty since Starship manages the prompt rendering
-ZSH_THEME=""
+# Prompt theme selector:
+# - p10k (default): uses powerlevel10k and ~/.p10k.zsh when present
+# - starship: uses Starship prompt initialization
+if [[ -z "${DOTFILES_PROMPT_THEME:-}" ]]; then
+  export DOTFILES_PROMPT_THEME="p10k"
+fi
+
+case "$DOTFILES_PROMPT_THEME" in
+  starship)
+    ZSH_THEME=""
+    ;;
+  p10k|*)
+    ZSH_THEME="powerlevel10k/powerlevel10k"
+    ;;
+esac
 
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
-{{ if eq .chezmoi.os "windows" }}
-if [[ -d "/c/Apps/bin" ]]; then
-  export PATH="/c/Apps/bin:$PATH"
-fi
-{{ end }}
+# Shared/local shell modules managed by chezmoi.
+[[ -r "$HOME/.tooling.zsh" ]] && source "$HOME/.tooling.zsh"
+[[ -r "$HOME/.work.zsh" ]] && source "$HOME/.work.zsh"
 
-# --- Initialize Starship Prompt ---
-if command -v starship >/dev/null 2>&1; then
-  _starship_bin="$(command -v starship)"
-  {{ if eq .chezmoi.os "windows" }}
-  # Git Bash + Windows paths with spaces can break generated init script parsing.
-  # Only run starship init when the resolved binary path has no spaces.
-  if [[ "$_starship_bin" != *" "* ]]; then
+if [[ "$DOTFILES_PROMPT_THEME" == "starship" ]]; then
+  if command -v starship >/dev/null 2>&1; then
+    _starship_bin="$(command -v starship)"
+    {{ if eq .chezmoi.os "windows" }}
+    # Git Bash + Windows paths with spaces can break generated init script parsing.
+    # Only run starship init when the resolved binary path has no spaces.
+    if [[ "$_starship_bin" != *" "* ]]; then
+      eval "$("$_starship_bin" init zsh)"
+    fi
+    {{ else }}
     eval "$("$_starship_bin" init zsh)"
+    {{ end }}
+    unset _starship_bin
   fi
-  {{ else }}
-  eval "$("$_starship_bin" init zsh)"
-  {{ end }}
-  unset _starship_bin
+else
+  [[ -r "$HOME/.p10k.zsh" ]] && source "$HOME/.p10k.zsh"
 fi
-
-# --- OS Specific Environment Hooks ---
-{{ if eq .chezmoi.os "darwin" }}
-# macOS-specific aliases & paths
-export PATH="/opt/homebrew/bin:$PATH"
-alias ls="ls -G"
-{{ else if eq .chezmoi.os "linux" }}
-# Fedora/Linux specific aliases & paths
-alias ls="ls --color=auto"
-{{ else if eq .chezmoi.os "windows" }}
-# Windows / Git Bash specific aliases
-alias open="explorer.exe"
-{{ end }}
-
-# --- NVM & Node Initialization ---
-{{ if eq .chezmoi.os "windows" }}
-# Windows uses nvm-windows via standard system PATH.
-# Enable Corepack shim paths if needed:
-export PATH="$APPDATA/npm:$PATH"
-
-{{ else if eq .chezmoi.os "darwin" }}
-# macOS (Homebrew NVM path)
-export NVM_DIR="$HOME/.nvm"
-[ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"
-[ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
-
-{{ else if eq .chezmoi.os "linux" }}
-# Fedora / Linux (Standard NVM path)
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-{{ end }}

@@ -1,0 +1,29 @@
+{{ if eq .chezmoi.os "windows" -}}
+if [[ -d "/c/Apps/bin" ]]; then
+  export PATH="/c/Apps/bin:$PATH"
+fi
+{{ end -}}
+
+# SDK and toolchain path bootstrap (local additions can live below).
+{{ if eq .chezmoi.os "darwin" -}}
+if [[ -d "/opt/homebrew/bin" ]]; then
+  export PATH="/opt/homebrew/bin:$PATH"
+fi
+alias ls="ls -G"
+{{ else if eq .chezmoi.os "linux" -}}
+alias ls="ls --color=auto"
+{{ else if eq .chezmoi.os "windows" -}}
+alias open="explorer.exe"
+export PATH="$APPDATA/npm:$PATH"
+{{ end -}}
+
+# Node / NVM
+{{ if eq .chezmoi.os "darwin" -}}
+export NVM_DIR="$HOME/.nvm"
+[ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"
+[ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+{{ else if eq .chezmoi.os "linux" -}}
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+{{ end -}}
